@@ -2,5 +2,5 @@
 
 int main()
 {
-    OS::run_kernel();
+	OS::run_kernel();
 }

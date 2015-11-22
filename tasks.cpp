@@ -71,7 +71,7 @@ void STDCALL counter_process(void* parameter)
 	// В многопоточной среде srand() и rand() могут выдавать одинаковые,
 	// псевдослучайные последовательности для всех потоков. Используются
 	// собственные генераторы для каждой задачи.
-    RandomGenerator generator(1, 1000);
+	RandomGenerator generator(1, 1000);
 
 	size_t counter = 0;
 	while (true) {

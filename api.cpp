@@ -12,16 +12,16 @@ namespace API
 
 void yield()
 {
-    Context kernel = get_kernel_context();
-    switch_to(kernel);
+	Context kernel = get_kernel_context();
+	switch_to(kernel);
 }
 
 
 void terminate()
 {
-    Task* task = get_current_task();
-    task->state = Terminated;
-    yield();
+	Task* task = get_current_task();
+	task->state = Terminated;
+	yield();
 }
 
 // get_semaphore() реализуется в semaphore.cpp.

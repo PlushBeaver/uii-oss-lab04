@@ -18,7 +18,7 @@ public:
 
 private:
 	std::default_random_engine algorithm_;
-    std::uniform_int_distribution<size_t> generator_;
+	std::uniform_int_distribution<size_t> generator_;
 
 private:
 	static std::random_device entropy_source_;
