@@ -88,9 +88,9 @@ void STDCALL counter_process(void* parameter)
 
 void STDCALL init_process(void* /*unused*/)
 {
-	// Для проверки циклического и лотерейного планировщика.
-//	OS::API::spawn(printer_process, (void*)"First message.");
-//	OS::API::spawn(printer_process, (void*)"Second message, a bit longer one.");
+	// Для проверки циклического и FIFO-планировщика.
+	OS::API::spawn(printer_process, (void*)"First message.\n");
+	OS::API::spawn(printer_process, (void*)"Second, longer, message.\n");
 
 	// Для проверки приоритетного планировщика: единственному производителю
 	// целесообразно выделять больше времени, чем многим потребителям.

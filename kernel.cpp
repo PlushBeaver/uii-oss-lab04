@@ -14,11 +14,51 @@
 
 using namespace std;
 
+// Макрос `klog' можно использовать как `cout' для печати сообщений ядра.
+// Если заменить `false' на `true', будут показываться сообщения ядра.
+#define klog \
+    if (false) \
+        std::clog << "KERNEL: " << __func__ << ": "
+
 namespace OS
 {
 
+// Позволяет выводить состояние задачи в читаемом виде через <<.
+static ostream& operator<<(ostream& output, const TaskState& value);
+
 /// Все задачи в "ядре".
-std::vector<Task*> tasks;
+static std::vector<Task*> tasks;
+
+// HINT:
+//    Планировщик "первым пришел --- первым обслужен" (как пример).
+//    Выбирает первую задачу в очереди, готовую к исполнению.
+//    Удаляет завершенные задачи, игнорирует заблокированные.
+Task* first_in_first_out_scheduler()
+{
+	auto iterator = tasks.begin();
+	while (iterator != tasks.end()) {
+		Task* task = *iterator;
+		switch (task->state) {
+		case Ready:
+		    klog << "first ready task is " << task->id << '\n';
+			return task;
+		case Terminated:
+		    klog << "task " << task->id << " has terminated, removing it\n";
+			delete task;
+			iterator = tasks.erase(iterator);
+			break;
+		case Blocked:
+		    klog << "task " << task->id << " is blocked, skipping it\n";
+			++iterator;
+			break;
+		default:
+			// На случай, если будут добавлены новые состояния,
+			// которые планировщик обрабатывать не способен.
+			assert(!"Unsupported task state in FIFO scheduler!");
+		}
+	}
+	return nullptr;
+}
 
 
 Task* round_robin_scheduler()
@@ -36,7 +76,6 @@ Task* guaranteed_scheduler()
 
 
 Task* schedule() {
-	// TODO:
 	// Любой планировщик должен:
 	//    1. Выбирать очередную готовую задачу для выполнения.
 	//    2. Удалять завершенные задачи через remove_task().
@@ -44,8 +83,11 @@ Task* schedule() {
 	//       (задач не осталось или они все заблокированы).
 	// Планировщик может хранить нужные ему данные между вызовами
 	// в глобальных или статических переменных.
-
-	return round_robin_scheduler();
+    //
+    // Раскомментируйте одну из следующих трех строк, чтобы работал один
+    // из алгоритмов планирования: FIFO, циклического или приоритетного.
+	return first_in_first_out_scheduler();
+//	return round_robin_scheduler();
 //	return guaranteed_scheduler();
 }
 
@@ -63,6 +105,29 @@ void spawn(EntryPoint entry_point, void* parameter /*= nullptr*/)
 	task->context = CreateFiber(16*1024, entry_point, parameter);
 	task->state = Ready;
 	tasks.push_back(task);
+
+    if (Task* spawner = get_current_task()) {
+        klog << "task "         << spawner->id << " "
+             << "spawned task " << task->id    << "\n";
+    }
+}
+
+
+void yield()
+{
+	klog << "task " << get_current_task()->id << " yielded.\n";
+
+	switch_to_kernel();
+}
+
+
+void terminate()
+{
+	klog << "task " << get_current_task()->id << " is terminating.\n";
+
+	Task* task = get_current_task();
+	task->state = Terminated;
+	yield();
 }
 
 } // namespace API
@@ -72,54 +137,63 @@ void spawn(EntryPoint entry_point, void* parameter /*= nullptr*/)
 // Функции ниже имитируют работу механизмов ОС, их не требуется изменять.
 // --------------------------------------------------------------------------
 
-static Context kernel_context;
-
+static Context kernel_context = nullptr;
+static Task* current_task = nullptr;
 
 // "Ядро" операционной системы:
 void run_kernel()
 {
 	// 1. Сохраняет свой контекст исполнения.
 	kernel_context = ConvertThreadToFiber(NULL);
+
 	// 2. Запускает процесс init, который запустит остальные.
 	API::spawn(init_process, nullptr);
-	// 3. Планирует выполнение очередной задачи и переключается на неё.
+
+	// 3. Планирует выполнение очередной задачи, если они еще остались.
 	while (Task* task = schedule()) {
-		assert(("will only switch to task in ready state", task->state == Ready));
-		SwitchToFiber(task->context);
+
+		klog << "task " << task->id << " was selected by scheduler\n";
+		if (task->state != Ready) {
+            klog << "ERROR: active task is not in Ready state!\n";
+            klog << "WARNING: system may now halt or abort!\n";
+		}
+
+		// 4. Переключается на выбранную планировщиком задачу.
+		switch_to(task);
 	}
+
+	klog << "all tasks terminated, system will now halt\n";
 }
 
 
-Context get_kernel_context()
+Task* get_current_task()
 {
-	return kernel_context;
+	return current_task;
 }
 
 
-Task* get_current_task() {
-	LPVOID context = GetCurrentFiber();
-	for (Task* task : tasks)
-		if (task->context == context)
-			return task;
-	cerr << __PRETTY_FUNCTION__ << ": " << "no task owns current context!" << '\n';
-	return nullptr;
-}
-
-
-void remove_task(Task* task) {
-	auto iterator = std::find_if(
-			tasks.begin(), tasks.end(),
-			[task](auto item) { return task->id == item->id; });
-	if (iterator != tasks.end())
-		tasks.erase(iterator);
-	else
-		cerr << __PRETTY_FUNCTION__ << ": " << "unable to remove task " << task->id << " not managed by OS!" << '\n';
-}
-
-
-void switch_to(Context context)
+void switch_to_kernel()
 {
-	SwitchToFiber(context);
+	SwitchToFiber(kernel_context);
+}
+
+
+void switch_to(Task* task)
+{
+	current_task = task;
+	SwitchToFiber(task->context);
+}
+
+
+static ostream& operator<<(ostream& output, const TaskState& value)
+{
+	switch (value) {
+		case Ready:      output << "Ready";      break;
+		case Blocked:    output << "Blocked";    break;
+		case Terminated: output << "Terminated"; break;
+		default:         output << "<Unknown>";  break;
+	}
+	return output;
 }
 
 } // namespace OS

@@ -31,7 +31,6 @@
 		<Compiler>
 			<Add option="-Wall" />
 		</Compiler>
-		<Unit filename="api.cpp" />
 		<Unit filename="api.h" />
 		<Unit filename="generator.h" />
 		<Unit filename="init.h" />
